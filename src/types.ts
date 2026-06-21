@@ -14,6 +14,7 @@ export type SectionKey =
   | "trades"
   | "review"
   | "database"
+  | "cloud"
   | "guide";
 
 export interface NavItem {

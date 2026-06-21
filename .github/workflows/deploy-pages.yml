@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      reason:
+        description: Manual refresh reason
+        required: false
+        type: string
   schedule:
     # Taiwan pre-market refresh: 08:00 Asia/Taipei, Monday-Friday.
     - cron: "0 0 * * 1-5"
@@ -30,7 +35,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
 
       - name: Install dependencies
@@ -40,6 +45,11 @@ jobs:
         run: npm run refresh:data
 
       - name: Build app
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GITHUB_REPOSITORY: ${{ github.repository }}
+          VITE_REFRESH_WORKFLOW_FILE: deploy-pages.yml
         run: npm run build
 
       - name: Configure Pages

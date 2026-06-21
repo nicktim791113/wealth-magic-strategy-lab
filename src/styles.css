@@ -1575,6 +1575,184 @@ input[type="range"] {
   line-height: 1.4;
 }
 
+.cloud-page {
+  display: grid;
+  gap: 14px;
+}
+
+.cloud-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr);
+  gap: 14px;
+  padding: 16px;
+}
+
+.cloud-hero h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.35;
+}
+
+.cloud-hero p,
+.cloud-refresh-box p,
+.cloud-setup p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.cloud-mini-flow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cloud-mini-flow span {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-alt);
+  padding: 10px;
+  color: var(--teal-dark);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.cloud-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.86fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.cloud-auth-form,
+.cloud-card-list,
+.cloud-setup,
+.cloud-job-list {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.cloud-auth-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+}
+
+.cloud-auth-form .segmented-control,
+.cloud-auth-form .cloud-message {
+  grid-column: 1 / -1;
+}
+
+.cloud-message,
+.cloud-toast {
+  border: 1px solid #cfe6e4;
+  border-radius: 8px;
+  background: #eef7f6;
+  color: var(--teal-dark);
+  padding: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cloud-toast {
+  position: sticky;
+  bottom: 14px;
+  z-index: 5;
+}
+
+.cloud-info,
+.cloud-refresh-box,
+.cloud-job {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-alt);
+  padding: 12px;
+}
+
+.cloud-info {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 9px;
+  align-items: start;
+}
+
+.cloud-info svg,
+.cloud-refresh-box svg {
+  color: var(--teal);
+  margin-top: 2px;
+}
+
+.cloud-info span,
+.cloud-info strong,
+.cloud-refresh-box span,
+.cloud-refresh-box strong,
+.cloud-job span,
+.cloud-job strong {
+  display: block;
+}
+
+.cloud-info span,
+.cloud-refresh-box span,
+.cloud-job span,
+.cloud-job p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.cloud-info strong,
+.cloud-refresh-box strong {
+  margin-top: 3px;
+  word-break: break-word;
+}
+
+.cloud-refresh-box {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 10px;
+  margin: 14px;
+}
+
+.cloud-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+
+.cloud-job {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.45fr) 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.cloud-job p {
+  margin: 0;
+}
+
+.cloud-job a {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.cloud-setup code {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-alt);
+  color: var(--teal-dark);
+  padding: 9px 10px;
+  white-space: normal;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .empty-state {
   padding: 18px;
   color: var(--muted);
@@ -1609,6 +1787,8 @@ input[type="range"] {
   .schema-grid,
   .intelligence-grid,
   .source-status-grid,
+  .cloud-grid,
+  .cloud-hero,
   .guide-grid,
   .guide-hero {
     grid-template-columns: 1fr;
@@ -1669,6 +1849,9 @@ input[type="range"] {
   .regime-layout,
   .hypothesis-form,
   .intake-form,
+  .cloud-auth-form,
+  .cloud-mini-flow,
+  .cloud-job,
   .mining-method,
   .workflow-lanes,
   .pretrade-grid,

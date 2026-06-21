@@ -2,6 +2,7 @@ import {
   BarChart3,
   BookOpenCheck,
   CandlestickChart,
+  CloudCog,
   ClipboardCheck,
   Database,
   FlaskConical,
@@ -10,6 +11,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { CloudPage, type CloudSnapshotPayload } from "./components/CloudPage";
 import { Dashboard } from "./components/Dashboard";
 import { DatabasePage } from "./components/DatabasePage";
 import { ExperimentLab } from "./components/ExperimentLab";
@@ -48,6 +50,7 @@ const navItems: NavItem[] = [
   { key: "trades", label: "模擬交易", icon: CandlestickChart },
   { key: "review", label: "復盤中心", icon: ClipboardCheck },
   { key: "database", label: "資料庫", icon: Database },
+  { key: "cloud", label: "雲端控制", icon: CloudCog },
   { key: "guide", label: "使用說明", icon: BookOpenCheck },
 ];
 
@@ -195,6 +198,17 @@ function App() {
     setIntelligenceSources((current) => [source, ...current]);
   }
 
+  function restoreCloudSnapshot(payload: CloudSnapshotPayload) {
+    if (payload.hypotheses) setHypotheses(payload.hypotheses);
+    if (payload.trades) setTrades(payload.trades);
+    if (payload.intelligenceSources) setIntelligenceSources(payload.intelligenceSources);
+    if (payload.checkedTasks) setCheckedTasks(payload.checkedTasks);
+    if (typeof payload.reviewNotes === "string") setReviewNotes(payload.reviewNotes);
+    if (typeof payload.capital === "number") setCapital(payload.capital);
+    if (typeof payload.riskPct === "number") setRiskPct(payload.riskPct);
+    if (typeof payload.stopPct === "number") setStopPct(payload.stopPct);
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -315,6 +329,20 @@ function App() {
         ) : null}
 
         {activeSection === "database" ? <DatabasePage schemaTables={schemaTables} /> : null}
+
+        {activeSection === "cloud" ? (
+          <CloudPage
+            hypotheses={hypotheses}
+            trades={trades}
+            intelligenceSources={intelligenceSources}
+            checkedTasks={checkedTasks}
+            reviewNotes={reviewNotes}
+            capital={capital}
+            riskPct={riskPct}
+            stopPct={stopPct}
+            onRestore={restoreCloudSnapshot}
+          />
+        ) : null}
 
         {activeSection === "guide" ? <GuidePage /> : null}
       </main>
