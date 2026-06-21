@@ -75,8 +75,9 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
+    const dataUrl = `${import.meta.env.BASE_URL}data/market-lab-latest.json`;
 
-    fetch("/data/market-lab-latest.json", { cache: "no-store" })
+    fetch(dataUrl, { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json() as Promise<MarketDataSnapshot>;
