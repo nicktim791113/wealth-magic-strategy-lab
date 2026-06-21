@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owns(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow read, create, update: if owns(userId);
+      allow delete: if false;
+
+      match /settings/{settingId} {
+        allow read, write: if owns(userId);
+      }
+
+      match /labSnapshots/{snapshotId} {
+        allow read, create, update, delete: if owns(userId);
+      }
+
+      match /hypotheses/{hypothesisId} {
+        allow read, create, update, delete: if owns(userId);
+      }
+
+      match /trades/{tradeId} {
+        allow read, create, update, delete: if owns(userId);
+      }
+
+      match /intelligenceSources/{sourceId} {
+        allow read, create, update, delete: if owns(userId);
+      }
+
+      match /refreshJobs/{jobId} {
+        allow read: if owns(userId);
+        allow write: if false;
+      }
+    }
+  }
+}

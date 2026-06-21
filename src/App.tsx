@@ -10,8 +10,8 @@ import {
   RadioTower,
   Trophy,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { CloudPage, type CloudSnapshotPayload } from "./components/CloudPage";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import type { CloudSnapshotPayload } from "./components/CloudPage";
 import { Dashboard } from "./components/Dashboard";
 import { DatabasePage } from "./components/DatabasePage";
 import { ExperimentLab } from "./components/ExperimentLab";
@@ -41,6 +41,8 @@ import type {
   SectionKey,
   SimulatedTrade,
 } from "./types";
+
+const CloudPage = lazy(() => import("./components/CloudPage").then((module) => ({ default: module.CloudPage })));
 
 const navItems: NavItem[] = [
   { key: "dashboard", label: "今日市場", icon: BarChart3 },
@@ -331,17 +333,19 @@ function App() {
         {activeSection === "database" ? <DatabasePage schemaTables={schemaTables} /> : null}
 
         {activeSection === "cloud" ? (
-          <CloudPage
-            hypotheses={hypotheses}
-            trades={trades}
-            intelligenceSources={intelligenceSources}
-            checkedTasks={checkedTasks}
-            reviewNotes={reviewNotes}
-            capital={capital}
-            riskPct={riskPct}
-            stopPct={stopPct}
-            onRestore={restoreCloudSnapshot}
-          />
+          <Suspense fallback={<div className="empty-state">載入雲端控制...</div>}>
+            <CloudPage
+              hypotheses={hypotheses}
+              trades={trades}
+              intelligenceSources={intelligenceSources}
+              checkedTasks={checkedTasks}
+              reviewNotes={reviewNotes}
+              capital={capital}
+              riskPct={riskPct}
+              stopPct={stopPct}
+              onRestore={restoreCloudSnapshot}
+            />
+          </Suspense>
         ) : null}
 
         {activeSection === "guide" ? <GuidePage /> : null}

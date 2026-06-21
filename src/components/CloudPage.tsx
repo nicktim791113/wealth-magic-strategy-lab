@@ -9,10 +9,29 @@ import {
   ShieldCheck,
   UploadCloud,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  type Timestamp,
+} from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import { cloudConfig, isCloudConfigured } from "../lib/cloudConfig";
-import { useCloudSession } from "../lib/useCloudSession";
+import { cloudFunctions, firestore } from "../lib/firebaseClient";
+import { useFirebaseSession } from "../lib/useFirebaseSession";
 import type { Hypothesis, IntelligenceSource, SimulatedTrade } from "../types";
 import { Panel } from "./ui";
 
@@ -43,9 +62,16 @@ export interface CloudSnapshotPayload {
 interface RefreshJob {
   id: string;
   status: string;
-  reason: string | null;
-  github_run_url: string | null;
-  created_at: string;
+  reason: string;
+  githubRunUrl: string;
+  workflowFile: string;
+  createdAt?: Timestamp;
+}
+
+interface TriggerRefreshResult {
+  message?: string;
+  actionsUrl?: string;
+  jobId?: string;
 }
 
 export function CloudPage({
@@ -59,7 +85,7 @@ export function CloudPage({
   stopPct,
   onRestore,
 }: CloudPageProps) {
-  const { session, loading, supabase } = useCloudSession();
+  const { user, loading, auth } = useFirebaseSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
@@ -84,125 +110,144 @@ export function CloudPage({
   );
 
   useEffect(() => {
-    if (!session || !supabase) return;
-    void refreshCloudState();
-  }, [session, supabase]);
+    if (!user || !firestore) return;
+    void refreshCloudState(user.uid);
+  }, [user]);
 
   async function signInOrUp() {
-    if (!supabase) return;
+    if (!auth) return;
     setBusy(true);
     setMessage("");
 
-    const authCall =
-      mode === "sign-up"
-        ? supabase.auth.signUp({ email, password })
-        : supabase.auth.signInWithPassword({ email, password });
-    const { error } = await authCall;
+    try {
+      const credential =
+        mode === "sign-up"
+          ? await createUserWithEmailAndPassword(auth, email, password)
+          : await signInWithEmailAndPassword(auth, email, password);
 
-    setBusy(false);
-    setMessage(error ? error.message : mode === "sign-up" ? "帳號已建立，若 Supabase 要求驗證信箱，請先完成驗證。" : "已登入雲端實驗室。");
+      if (firestore) {
+        await setDoc(
+          doc(firestore, "users", credential.user.uid),
+          {
+            email: credential.user.email,
+            updatedAt: serverTimestamp(),
+            createdAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
+      }
+
+      setMessage(mode === "sign-up" ? "帳號已建立，已登入雲端實驗室。" : "已登入雲端實驗室。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "登入失敗。");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function signOut() {
-    if (!supabase) return;
-    await supabase.auth.signOut();
+  async function signOutCloud() {
+    if (!auth) return;
+    await signOut(auth);
     setJobs([]);
     setLastSnapshotAt("");
     setMessage("已登出。");
   }
 
-  async function refreshCloudState() {
-    if (!supabase || !session) return;
+  async function refreshCloudState(uid = user?.uid) {
+    if (!firestore || !uid) return;
 
-    const [{ data: jobRows }, { data: snapshotRows }] = await Promise.all([
-      supabase
-        .from("refresh_jobs")
-        .select("id,status,reason,github_run_url,created_at")
-        .order("created_at", { ascending: false })
-        .limit(6),
-      supabase
-        .from("lab_snapshots")
-        .select("created_at")
-        .order("created_at", { ascending: false })
-        .limit(1),
+    const [jobRows, snapshotRows] = await Promise.all([
+      getDocs(query(collection(firestore, "users", uid, "refreshJobs"), orderBy("createdAt", "desc"), limit(6))),
+      getDocs(query(collection(firestore, "users", uid, "labSnapshots"), orderBy("createdAt", "desc"), limit(1))),
     ]);
 
-    setJobs((jobRows ?? []) as RefreshJob[]);
-    setLastSnapshotAt(snapshotRows?.[0]?.created_at ?? "");
+    setJobs(
+      jobRows.docs.map((item) => ({
+        id: item.id,
+        ...(item.data() as Omit<RefreshJob, "id">),
+      })),
+    );
+
+    const latestSnapshot = snapshotRows.docs[0]?.data();
+    setLastSnapshotAt(formatCloudDate(latestSnapshot?.createdAt));
   }
 
   async function syncToCloud() {
-    if (!supabase || !session) return;
+    if (!firestore || !user) return;
     setBusy(true);
     setMessage("");
 
-    const profileResult = await supabase.from("profiles").upsert({
-      id: session.user.id,
-      email: session.user.email,
-      updated_at: new Date().toISOString(),
-    });
-    const snapshotResult = await supabase.from("lab_snapshots").insert({
-      user_id: session.user.id,
-      snapshot_type: "manual-sync",
-      payload: snapshotPayload,
-    });
-
-    setBusy(false);
-
-    if (profileResult.error || snapshotResult.error) {
-      setMessage(profileResult.error?.message ?? snapshotResult.error?.message ?? "同步失敗。");
-      return;
+    try {
+      await setDoc(
+        doc(firestore, "users", user.uid),
+        {
+          email: user.email,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      await addDoc(collection(firestore, "users", user.uid, "labSnapshots"), {
+        snapshotType: "manual-sync",
+        payload: snapshotPayload,
+        createdAt: serverTimestamp(),
+      });
+      setMessage("已把目前實驗室資料同步到 Firebase Firestore。");
+      await refreshCloudState(user.uid);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "同步失敗。");
+    } finally {
+      setBusy(false);
     }
-
-    setMessage("已把目前實驗室資料同步到雲端資料庫。");
-    await refreshCloudState();
   }
 
   async function restoreLatestSnapshot() {
-    if (!supabase || !session) return;
+    if (!firestore || !user) return;
     setBusy(true);
     setMessage("");
 
-    const { data, error } = await supabase
-      .from("lab_snapshots")
-      .select("payload,created_at")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    try {
+      const snapshots = await getDocs(
+        query(collection(firestore, "users", user.uid, "labSnapshots"), orderBy("createdAt", "desc"), limit(1)),
+      );
+      const latest = snapshots.docs[0]?.data();
 
-    setBusy(false);
+      if (!latest?.payload) {
+        setMessage("目前沒有可還原的 Firebase 快照。");
+        return;
+      }
 
-    if (error || !data?.payload) {
-      setMessage(error?.message ?? "目前沒有可還原的雲端快照。");
-      return;
+      onRestore(latest.payload as CloudSnapshotPayload);
+      setMessage(`已還原 ${formatCloudDate(latest.createdAt)} 的雲端快照。`);
+      await refreshCloudState(user.uid);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "還原失敗。");
+    } finally {
+      setBusy(false);
     }
-
-    onRestore(data.payload as CloudSnapshotPayload);
-    setMessage(`已還原 ${formatDateTime(data.created_at)} 的雲端快照。`);
-    await refreshCloudState();
   }
 
   async function triggerRefresh() {
-    if (!supabase || !session) return;
+    if (!cloudFunctions || !user) return;
     setBusy(true);
     setMessage("");
 
-    const { data, error } = await supabase.functions.invoke("trigger-refresh", {
-      body: {
-        reason: "manual-refresh-from-cloud-page",
+    try {
+      const triggerRefreshFn = httpsCallable<
+        { reason: string; workflowFile: string },
+        TriggerRefreshResult
+      >(cloudFunctions, "triggerRefresh");
+      const result = await triggerRefreshFn({
+        reason: "manual-refresh-from-firebase-cloud-page",
         workflowFile: cloudConfig.refreshWorkflowFile,
-      },
-    });
+      });
 
-    setBusy(false);
-
-    if (error) {
-      setMessage(error.message);
-      return;
+      setMessage(result.data.message ?? "已送出立即更新請求。");
+      await refreshCloudState(user.uid);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "立即更新失敗。");
+    } finally {
+      setBusy(false);
     }
-
-    setMessage(data?.message ?? "已送出立即更新請求，GitHub Actions 會開始刷新資料並重新部署。");
-    await refreshCloudState();
   }
 
   if (!isCloudConfigured) {
@@ -213,13 +258,13 @@ export function CloudPage({
     return (
       <div className="cloud-page">
         <Panel title="雲端實驗室">
-          <div className="empty-state">正在讀取登入狀態...</div>
+          <div className="empty-state">正在讀取 Firebase 登入狀態...</div>
         </Panel>
       </div>
     );
   }
 
-  if (!session) {
+  if (!user) {
     return (
       <div className="cloud-page">
         <CloudHero />
@@ -264,9 +309,9 @@ export function CloudPage({
       <div className="cloud-grid">
         <Panel title="帳號與資料庫" action={<span className="status-chip active">已登入</span>}>
           <div className="cloud-card-list">
-            <CloudInfo icon={<ShieldCheck size={16} />} label="登入帳號" value={session.user.email ?? session.user.id} />
-            <CloudInfo icon={<DatabaseZap size={16} />} label="Supabase" value={cloudConfig.supabaseUrl} />
-            <CloudInfo icon={<Save size={16} />} label="最近雲端快照" value={lastSnapshotAt ? formatDateTime(lastSnapshotAt) : "尚未同步"} />
+            <CloudInfo icon={<ShieldCheck size={16} />} label="登入帳號" value={user.email ?? user.uid} />
+            <CloudInfo icon={<DatabaseZap size={16} />} label="Firebase project" value={cloudConfig.firebase.projectId} />
+            <CloudInfo icon={<Save size={16} />} label="最近雲端快照" value={lastSnapshotAt || "尚未同步"} />
           </div>
           <div className="cloud-actions">
             <button className="primary-button" disabled={busy} type="button" onClick={syncToCloud}>
@@ -277,20 +322,20 @@ export function CloudPage({
               <DatabaseZap size={15} />
               還原最新快照
             </button>
-            <button className="secondary-button" disabled={busy} type="button" onClick={signOut}>
+            <button className="secondary-button" disabled={busy} type="button" onClick={signOutCloud}>
               <LogOut size={15} />
               登出
             </button>
           </div>
         </Panel>
 
-        <Panel title="立即更新" action={<span className="status-chip">GitHub Actions</span>}>
+        <Panel title="立即更新" action={<span className="status-chip">Firebase Functions</span>}>
           <div className="cloud-refresh-box">
             <GitBranch size={18} />
             <div>
               <strong>{cloudConfig.githubRepository}</strong>
               <span>Workflow: {cloudConfig.refreshWorkflowFile}</span>
-              <p>按下後會透過 Supabase Edge Function 觸發 GitHub Actions，重新抓行情、新聞並部署 GitHub Pages。</p>
+              <p>按下後會透過 Firebase Cloud Function 觸發 GitHub Actions，重新抓行情、新聞並部署 GitHub Pages。</p>
             </div>
           </div>
           <div className="cloud-actions">
@@ -298,7 +343,7 @@ export function CloudPage({
               <RefreshCw size={15} />
               {busy ? "送出中" : "立即更新"}
             </button>
-            <button className="secondary-button" disabled={busy} type="button" onClick={refreshCloudState}>
+            <button className="secondary-button" disabled={busy} type="button" onClick={() => refreshCloudState()}>
               查看狀態
             </button>
           </div>
@@ -312,11 +357,11 @@ export function CloudPage({
               <article className="cloud-job" key={job.id}>
                 <div>
                   <strong>{job.status}</strong>
-                  <span>{formatDateTime(job.created_at)}</span>
+                  <span>{formatCloudDate(job.createdAt)}</span>
                 </div>
-                <p>{job.reason ?? "manual refresh"}</p>
-                {job.github_run_url ? (
-                  <a href={job.github_run_url} rel="noreferrer" target="_blank">
+                <p>{job.reason || "manual refresh"}</p>
+                {job.githubRunUrl ? (
+                  <a href={job.githubRunUrl} rel="noreferrer" target="_blank">
                     打開 GitHub Actions
                   </a>
                 ) : null}
@@ -337,13 +382,14 @@ function CloudSetupGuide() {
   return (
     <div className="cloud-page">
       <CloudHero />
-      <Panel title="第二階段尚未啟用" action={<span className="status-chip paused">等待 Supabase 設定</span>}>
+      <Panel title="第二階段尚未啟用" action={<span className="status-chip paused">等待 Firebase 設定</span>}>
         <div className="cloud-setup">
-          <p>目前網站仍會維持第一階段展示模式。建立 Supabase 專案並把下列 secrets 加到 GitHub 後，登入、資料庫與立即更新按鈕就會啟用。</p>
-          <code>VITE_SUPABASE_URL</code>
-          <code>VITE_SUPABASE_ANON_KEY</code>
+          <p>目前網站仍會維持第一階段展示模式。建立 Firebase 專案並把下列 secrets 加到 GitHub 後，登入、資料庫與立即更新按鈕就會啟用。</p>
+          <code>VITE_FIREBASE_API_KEY</code>
+          <code>VITE_FIREBASE_AUTH_DOMAIN</code>
+          <code>VITE_FIREBASE_PROJECT_ID</code>
+          <code>VITE_FIREBASE_APP_ID</code>
           <code>GITHUB_ACTIONS_TOKEN</code>
-          <code>SUPABASE_SERVICE_ROLE_KEY</code>
         </div>
       </Panel>
     </div>
@@ -352,16 +398,16 @@ function CloudSetupGuide() {
 
 function CloudHero() {
   return (
-    <Panel title="雲端投資實驗室" action={<span className="status-chip"><Cloud size={14} /> Phase 2</span>}>
+    <Panel title="雲端投資實驗室" action={<span className="status-chip"><Cloud size={14} /> Firebase</span>}>
       <div className="cloud-hero">
         <div>
-          <h2>把策略實驗、個人資料與更新操作搬到雲端</h2>
-          <p>登入後可以把本機實驗室快照同步到資料庫，也可以用「立即更新」從遠端觸發行情與新聞刷新。</p>
+          <h2>把策略實驗、個人資料與更新操作搬到 Firebase</h2>
+          <p>登入後可以把本機實驗室快照同步到 Firestore，也可以用「立即更新」從遠端觸發行情與新聞刷新。</p>
         </div>
         <div className="cloud-mini-flow">
-          <span>Supabase Auth</span>
-          <span>Postgres RLS</span>
-          <span>Edge Function</span>
+          <span>Firebase Auth</span>
+          <span>Firestore Rules</span>
+          <span>Cloud Functions</span>
           <span>GitHub Actions</span>
         </div>
       </div>
@@ -381,11 +427,21 @@ function CloudInfo({ icon, label, value }: { icon: ReactNode; label: string; val
   );
 }
 
-function formatDateTime(value: string) {
+function formatCloudDate(value: unknown) {
   if (!value) return "";
+  if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
+    return formatDateTime(value.toDate());
+  }
+  if (value instanceof Date || typeof value === "string") {
+    return formatDateTime(new Date(value));
+  }
+  return "";
+}
+
+function formatDateTime(value: Date) {
   return new Intl.DateTimeFormat("zh-TW", {
     dateStyle: "short",
     timeStyle: "medium",
     timeZone: "Asia/Taipei",
-  }).format(new Date(value));
+  }).format(value);
 }
