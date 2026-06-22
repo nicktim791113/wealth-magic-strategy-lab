@@ -194,6 +194,8 @@ button {
 
 .topbar-stats {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 10px;
 }
 
@@ -1857,6 +1859,7 @@ button:disabled {
   .pretrade-grid,
   .guide-flow,
   .prompt-strip {
+    display: grid;
     grid-template-columns: 1fr;
   }
 

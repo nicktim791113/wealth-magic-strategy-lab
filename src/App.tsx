@@ -104,6 +104,17 @@ function App() {
 
   const liveCandidates = marketData?.candidates ?? seedCandidates;
   const liveMarketIndexes = marketData?.marketIndexes ?? seedMarketIndexes;
+  const dataFreshnessLabel = marketData?.generatedAt
+    ? new Intl.DateTimeFormat("zh-TW", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Asia/Taipei",
+      }).format(new Date(marketData.generatedAt))
+    : dataError
+      ? "讀取失敗"
+      : "等待資料";
 
   const headerStats = useMemo(() => {
     const live = hypotheses.filter((item) => item.status === "watching" || item.status === "triggered").length;
@@ -255,6 +266,14 @@ function App() {
             <h1>{navItems.find((item) => item.key === activeSection)?.label}</h1>
           </div>
           <div className="topbar-stats">
+            <div>
+              <span>資料更新</span>
+              <strong>{dataFreshnessLabel}</strong>
+            </div>
+            <div>
+              <span>自動排程</span>
+              <strong>08:00 / 06:30</strong>
+            </div>
             <div>
               <span>假設命中</span>
               <strong>{headerStats.hitRate}%</strong>

@@ -32,6 +32,24 @@ functions/package.json
 
 ## Firebase setup
 
+Current Firebase project:
+
+```text
+wealth-magic-lab-nickt
+```
+
+Current setup status:
+
+- Firebase project: created
+- Firebase Web app: created
+- GitHub Actions Firebase web config secrets: configured
+- Cloud Firestore database: created in `asia-east1`
+- Firestore rules/indexes: deployed
+- Firebase Auth Email/Password: enable in Firebase Console
+- Cloud Functions `triggerRefresh`: blocked until the Firebase project is upgraded to Blaze
+
+Initial setup steps:
+
 1. Create a Firebase project.
 2. Add a Web app in Firebase project settings.
 3. Enable Authentication -> Email/Password.
@@ -56,6 +74,8 @@ firebase deploy --only firestore:rules,firestore:indexes,functions
 ```
 
 ## Firebase Function secrets
+
+The `立即更新` button requires Firebase Cloud Functions and Secret Manager. Firebase requires the project to be on the Blaze plan before `GITHUB_ACTIONS_TOKEN` can be stored as a function secret.
 
 Create a GitHub personal access token that can dispatch workflows for this repo, then set it as a Firebase secret:
 
